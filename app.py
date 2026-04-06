@@ -37,6 +37,7 @@ with col1:
     st.subheader("📍 Upper Reservoir (Source)")
     curr_u = st.number_input("Current Upper RL (m)", value=93.400, format="%.3f")
     lake_ph_rate = 0.820 
+    gate_is_open = st.toggle("Are Gates Currently Open?", value=True)
 
 with col2:
     st.subheader("📍 Lower Reservoir (Target)")
@@ -54,35 +55,30 @@ if st.button("Analyze Gate Status", type="primary"):
         # A. Calculate total water needed in Lower Res
         lower_ph_demand = l_gen_target * l_ph_rate
         
-        # B. Gate Calculation (Based on 3-tier head-dependent rules)
-    gate_vol = 0.0
-    if gate_is_open:
-        head_diff = u_level_in - l_level_in
+        # B. Gate Flow Calculation (3-tier head-dependent rules)
+        head_diff = curr_u - curr_l
         
-        # Define flow rate based on head tiers
         if head_diff > 3.0:
-            rate = 0.17  # MCM/hr for head > 3m
+            current_flow_rate = 0.17
         elif 2.0 <= head_diff <= 3.0:
-            rate = 0.15  # MCM/hr for head between 2m and 3m
+            current_flow_rate = 0.15
         elif 1.5 <= head_diff < 2.0:
-            rate = 0.12  # MCM/hr for head between 1.5m and 2m
+            current_flow_rate = 0.12
         else:
-            rate = 0.08  # Fallback for head < 1.5m
+            current_flow_rate = 0.08  # Fallback for low head
             
-        gate_vol = rate * hours_open
-
-        
         # C. Estimate time to close
-        # Time (hrs) = Water Needed (MCM) / Flow Rate (MCM/hr)
-        time_to_close = lower_ph_demand / current_flow_rate
+        # If gates are open, how much longer? If closed, how long would it take?
+        time_to_close = lower_ph_demand / current_flow_rate if current_flow_rate > 0 else 0
         
         # D. Upper Res Impact
-        target_u_mcm = 8.067 # for 94.50m
+        target_u_mcm = 8.067 # Volume at 94.50m
         idx_u = (np.abs(u_rl_table - curr_u)).argmin()
         start_u_mcm = u_mcm_table[idx_u]
         u_gap = target_u_mcm - start_u_mcm
         
-        # Total Gen required at Lake PH
+        # Total Gen required at Lake PH (0.82 rate)
+        # It must cover the filling gap PLUS the water sent to the lower reservoir
         total_release_mcm = u_gap + lower_ph_demand
         lake_gen_required = total_release_mcm / lake_ph_rate
 
@@ -93,18 +89,19 @@ if st.button("Analyze Gate Status", type="primary"):
         
         with c_advise:
             st.header("🏁 Gate Recommendation")
-            if time_to_close <= 0:
-                st.success("✅ CLOSE GATES NOW: Lower Reservoir has sufficient water.")
+            if lower_ph_demand <= 0:
+                st.success("✅ CLOSE GATES: Lower Reservoir requirements already met.")
             else:
-                st.warning(f"🕒 KEEP GATES OPEN: Close in {time_to_close:.2f} Hours.")
-                st.info(f"Targeting {lower_ph_demand:.3f} MCM transfer at {current_flow_rate} MCM/hr.")
+                st.warning(f"🕒 ACTION: Close gates in approx **{time_to_close:.2f} Hours**")
+                st.info(f"Current Head: {head_diff:.2f}m | Flow Rate: {current_flow_rate} MCM/hr")
 
         with c_gen:
             st.header("⚡ Generation Target")
-            st.metric("Lake PH Total Gen", f"{lake_gen_required:.3f} MUS")
-            st.caption(f"This gen includes {u_gap:.3f} MCM for your 94.50m level goal.")
+            st.metric("Lake PH Total Gen Goal", f"{lake_gen_required:.3f} MUS")
+            st.caption(f"Includes {u_gap:.3f} MCM for 94.50m level + {lower_ph_demand:.3f} MCM for Lower PH.")
 
         with st.expander("View Logic Details"):
-            st.write(f"Lower PH Target: {l_gen_target} MUS requires **{lower_ph_demand:.3f} MCM**.")
-            st.write(f"With a {head_diff:.2f}m head, flow is **{current_flow_rate} MCM/hr**.")
-            st.write(f"Upper Res filling needs **{u_gap:.3f} MCM**.")
+            st.write(f"Lower PH Target ({l_gen_target} MUS) requires **{lower_ph_demand:.3f} MCM**.")
+            st.write(f"Upper Reservoir filling gap: **{u_gap:.3f} MCM**.")
+            st.write(f"Total water to be processed: **{total_release_mcm:.3f} MCM**.")
+            
