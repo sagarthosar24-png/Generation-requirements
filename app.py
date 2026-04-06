@@ -27,85 +27,80 @@ l_mcm_table = np.array([
 ])
 
 # --- 2. LAYOUT ---
-st.set_page_config(page_title="Gate Operation Control", layout="wide")
-st.title("🚧 Smart Gate Closure Advisor")
+st.set_page_config(page_title="Lake Level & Gate Advisor", layout="wide")
+st.title("🌊 Lake Power House: Operations Planner")
 
 # --- 3. INPUTS ---
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📍 Upper Reservoir (Source)")
+    st.subheader("📍 Upper Lake Status")
     curr_u = st.number_input("Current Upper RL (m)", value=93.400, format="%.3f")
-    lake_ph_rate = 0.820 
+    lake_ph_rate = 0.820 # MCM/MUS
 
 with col2:
-    st.subheader("📍 Lower Reservoir (Target)")
+    st.subheader("📍 Lower Reservoir Status")
     curr_l = st.number_input("Current Lower RL (m)", value=92.500, format="%.3f")
     l_gen_target = st.number_input("Lower PH Planned Gen (MUS)", value=0.080, format="%.3f")
-    l_ph_rate = 9.360 
+    l_ph_rate = 9.360 # MCM/MUS
 
 # --- 4. CALCULATION ---
-if st.button("Analyze System Balance", type="primary"):
+if st.button("Calculate Total Generation Requirements", type="primary"):
     
-    # Safety Check
-    if curr_l < 90.000:
-        st.error("🚨 ALERT: Lower Res below 90m limit. Keep gates open!")
-    else:
-        # A. Calculate Lower Reservoir Water Balance
-        idx_l = (np.abs(l_rl_table - curr_l)).argmin()
-        current_l_mcm = l_mcm_table[idx_l]
-        min_l_mcm = 3.290  # Content at 90.000m
+    # A. Upper Lake Calculation (Target 94.50m = 8.067 MCM)
+    target_u_mcm = 8.067
+    idx_u = (np.abs(u_rl_table - curr_u)).argmin()
+    start_u_mcm = u_mcm_table[idx_u]
+    
+    u_gap_mcm = target_u_mcm - start_u_mcm
+    gen_for_level = u_gap_mcm / lake_ph_rate
+    
+    # B. Lower Reservoir Calculation (Safety 90.00m = 3.290 MCM)
+    idx_l = (np.abs(l_rl_table - curr_l)).argmin()
+    current_l_mcm = l_mcm_table[idx_l]
+    min_l_mcm = 3.290
+    
+    available_l_mcm = current_l_mcm - min_l_mcm
+    required_l_mcm = l_gen_target * l_ph_rate
+    
+    # C. Net Deficit/Transfer Requirement
+    net_transfer_needed = max(0.0, required_l_mcm - available_l_mcm)
+    gen_for_transfer = net_transfer_needed / lake_ph_rate
+    
+    # D. Gate Flow Calculation (3-tier)
+    head_diff = curr_u - curr_l
+    if head_diff > 3.0: flow_rate = 0.17
+    elif 2.0 <= head_diff <= 3.0: flow_rate = 0.15
+    elif 1.5 <= head_diff < 2.0: flow_rate = 0.12
+    else: flow_rate = 0.08
+    
+    time_to_close = net_transfer_needed / flow_rate if flow_rate > 0 else 0
+
+    # --- 5. RESULTS ---
+    st.divider()
+    
+    # TOTAL TARGET
+    total_lake_gen = gen_for_level + gen_for_transfer
+    st.header(f"Total Lake PH Gen Target: {total_lake_gen:.3f} MUS")
+    
+    res1, res2 = st.columns(2)
+    
+    with res1:
+        st.subheader("🏁 Level Goal")
+        st.metric("Gen for 94.50m", f"{gen_for_level:.3f} MUS")
+        st.write(f"Remaining Volume to fill: **{u_gap_mcm:.3f} MCM**")
         
-        available_l_mcm = current_l_mcm - min_l_mcm
-        required_l_mcm = l_gen_target * l_ph_rate
-        
-        # B. Determine if we need to transfer more water
-        net_transfer_needed = max(0.0, required_l_mcm - available_l_mcm)
-        
-        # C. Gate Flow Calculation (3-tier rules)
-        head_diff = curr_u - curr_l
-        if head_diff > 3.0:
-            flow_rate = 0.17
-        elif 2.0 <= head_diff <= 3.0:
-            flow_rate = 0.15
-        elif 1.5 <= head_diff < 2.0:
-            flow_rate = 0.12
+    with res2:
+        st.subheader("🏁 Transfer Goal")
+        if net_transfer_needed <= 0:
+            st.success("✅ CLOSE GATES: Water is sufficient.")
+            st.write(f"Surplus in Lower Res: **{abs(required_l_mcm - available_l_mcm):.3f} MCM**")
         else:
-            flow_rate = 0.08
-            
-        # Time to close based on the net deficit
-        time_to_close = net_transfer_needed / flow_rate if flow_rate > 0 else 0
-        
-        # D. Upper Res Impact (Target 94.50m)
-        target_u_mcm = 8.067
-        idx_u = (np.abs(u_rl_table - curr_u)).argmin()
-        start_u_mcm = u_mcm_table[idx_u]
-        u_gap = target_u_mcm - start_u_mcm
-        
-        # Total Lake Gen needed to cover the Gap and any necessary Lower transfer
-        total_mcm_req = u_gap + net_transfer_needed
-        lake_gen_required = total_mcm_req / lake_ph_rate
+            st.warning(f"🕒 KEEP OPEN for **{time_to_close:.2f} Hours**")
+            st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
 
-        # --- 5. ADVISORY OUTPUTS ---
-        st.divider()
-        c_advise, c_gen = st.columns(2)
+    with st.expander("Detailed Calculation breakdown"):
+        st.write(f"Upper Lake starting at **{start_u_mcm:.3f} MCM**.")
+        st.write(f"Lower Res has **{available_l_mcm:.3f} MCM** available above 90m.")
+        st.write(f"Current Head Difference is **{head_diff:.2f} m**.")
         
-        with c_advise:
-            st.header("🏁 Gate Recommendation")
-            if net_transfer_needed <= 0:
-                st.success("✅ CLOSE GATES NOW")
-                st.info(f"Available water ({available_l_mcm:.3f} MCM) exceeds target ({required_l_mcm:.3f} MCM).")
-            else:
-                st.warning(f"🕒 KEEP OPEN: Close in **{time_to_close:.2f} Hours**")
-                st.write(f"Deficit to cover: **{net_transfer_needed:.3f} MCM**")
-
-        with c_gen:
-            st.header("⚡ Generation Target")
-            st.metric("Lake PH Total Gen", f"{lake_gen_required:.3f} MUS")
-            st.caption(f"Fills Upper Res and covers the Lower Res deficit.")
-
-        with st.expander("View Hydraulic Calculations"):
-            st.write(f"Lower Reservoir Available (above 90m): **{available_l_mcm:.3f} MCM**")
-            st.write(f"Generation Demand: **{required_l_mcm:.3f} MCM**")
-            st.write(f"Current Head Difference: **{head_diff:.2f} m**")
-            
