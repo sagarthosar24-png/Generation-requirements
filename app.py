@@ -2,8 +2,6 @@ import streamlit as st
 import numpy as np
 
 # --- 1. SYNCHRONIZED DATA TABLES ---
-
-# UPPER RESERVOIR (0.025m increments aligned with MCM)
 u_rl_table = np.array([
     90.000, 90.025, 90.050, 90.075, 90.100, 90.125, 90.150, 90.175, 90.200, 90.225,
     90.250, 90.275, 90.300, 90.325, 90.350, 90.375, 90.400, 90.425, 90.450, 90.475,
@@ -20,7 +18,6 @@ u_mcm_table = np.array([
     5.036, 5.736, 6.539, 6.940, 7.535, 7.964, 7.990, 8.016, 8.041, 8.067, 9.081
 ])
 
-# LOWER RESERVOIR
 l_rl_table = np.array([
     89.000, 89.125, 89.250, 89.375, 89.500, 89.625, 89.750, 90.000, 91.000, 92.000, 93.000, 94.000, 95.000
 ])
@@ -30,60 +27,70 @@ l_mcm_table = np.array([
 ])
 
 # --- 2. LAYOUT ---
-st.set_page_config(page_title="Shift Master Planner", layout="wide")
-st.title("📋 Hydro Operations: Multi-Stage Planner")
+st.set_page_config(page_title="Gate Operation Control", layout="wide")
+st.title("🚧 Gate Operation & Closure Advisor")
 
 # --- 3. INPUTS ---
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📍 Phase 1: Upper Reservoir")
+    st.subheader("📍 Upper Reservoir (Source)")
     curr_u = st.number_input("Current Upper RL (m)", value=93.400, format="%.3f")
-    lake_ph_rate = 0.820 # MCM/MUS
-    
-    st.divider()
-    tunnel_hrs = st.number_input("Tunnel/Gate Open Duration (Hrs)", min_value=0.0, value=1.0)
+    lake_ph_rate = 0.820 
 
 with col2:
-    st.subheader("📍 Phase 2: Lower Reservoir")
+    st.subheader("📍 Lower Reservoir (Target)")
     curr_l = st.number_input("Current Lower RL (m)", value=92.000, format="%.3f")
     l_gen_target = st.number_input("Lower PH Planned Gen (MUS)", value=0.120, format="%.3f")
-    l_ph_rate = 9.360 # MCM/MUS
+    l_ph_rate = 9.360 
 
 # --- 4. CALCULATION ---
-if st.button("Calculate Shift Release Target", type="primary"):
+if st.button("Analyze Gate Status", type="primary"):
     
-    # SAFETY CHECK: Ensure tables are same length
-    if len(u_rl_table) != len(u_mcm_table):
-        st.error(f"Table Error: Upper RL has {len(u_rl_table)} items, but MCM has {len(u_mcm_table)}.")
-    elif curr_l < 90.000:
-        st.error("🚫 Operation Blocked: Lower Reservoir below 90.000m safety limit.")
+    # Safety Check
+    if curr_l < 90.000:
+        st.error("🚨 ALERT: Lower Res below 90m limit. Keep gates open to recover level!")
     else:
-        # A. Water to hit 94.50m in Upper Res
-        target_u_mcm = 8.067
+        # A. Calculate total water needed in Lower Res
+        lower_ph_demand = l_gen_target * l_ph_rate
+        
+        # B. Calculate current flow rate through gates
+        head_diff = curr_u - curr_l
+        current_flow_rate = 0.185 if head_diff >= 3.0 else 0.160 # MCM/hr
+        
+        # C. Estimate time to close
+        # Time (hrs) = Water Needed (MCM) / Flow Rate (MCM/hr)
+        time_to_close = lower_ph_demand / current_flow_rate
+        
+        # D. Upper Res Impact
+        target_u_mcm = 8.067 # for 94.50m
         idx_u = (np.abs(u_rl_table - curr_u)).argmin()
         start_u_mcm = u_mcm_table[idx_u]
         u_gap = target_u_mcm - start_u_mcm
         
-        # B. Water for Lower Res target
-        lower_demand = l_gen_target * l_ph_rate
-        
-        # C. Tunnel Flow
-        head_diff = curr_u - curr_l
-        flow_rate = 0.185 if head_diff >= 3.0 else 0.160
-        tunnel_total = flow_rate * tunnel_hrs
-        
-        # D. Final Calculation
-        total_mcm = u_gap + lower_demand + tunnel_total
-        lake_gen_mus = total_mcm / lake_ph_rate
-        
-        # --- 5. RESULTS ---
+        # Total Gen required at Lake PH
+        total_release_mcm = u_gap + lower_ph_demand
+        lake_gen_required = total_release_mcm / lake_ph_rate
+
+        # --- 5. ADVISORY OUTPUTS ---
         st.divider()
-        st.metric("Lake PH Generation Target", f"{lake_gen_mus:.3f} MUS")
-        st.success(f"Once Lake PH reaches **{lake_gen_mus:.3f} MUS**, targets are met.")
         
-        with st.expander("Detailed Handover Data"):
-            st.write(f"Upper Res RL Lookup: **{u_rl_table[idx_u]:.3f} m**")
-            st.write(f"Upper Res Gap: **{u_gap:.3f} MCM**")
-            st.write(f"Lower PH Demand: **{lower_demand:.3f} MCM**")
-            st.write(f"Tunnel Flow: **{tunnel_total:.3f} MCM**")
+        c_advise, c_gen = st.columns(2)
+        
+        with c_advise:
+            st.header("🏁 Gate Recommendation")
+            if time_to_close <= 0:
+                st.success("✅ CLOSE GATES NOW: Lower Reservoir has sufficient water.")
+            else:
+                st.warning(f"🕒 KEEP GATES OPEN: Close in {time_to_close:.2f} Hours.")
+                st.info(f"Targeting {lower_ph_demand:.3f} MCM transfer at {current_flow_rate} MCM/hr.")
+
+        with c_gen:
+            st.header("⚡ Generation Target")
+            st.metric("Lake PH Total Gen", f"{lake_gen_required:.3f} MUS")
+            st.caption(f"This gen includes {u_gap:.3f} MCM for your 94.50m level goal.")
+
+        with st.expander("View Logic Details"):
+            st.write(f"Lower PH Target: {l_gen_target} MUS requires **{lower_ph_demand:.3f} MCM**.")
+            st.write(f"With a {head_diff:.2f}m head, flow is **{current_flow_rate} MCM/hr**.")
+            st.write(f"Upper Res filling needs **{u_gap:.3f} MCM**.")
