@@ -54,9 +54,23 @@ if st.button("Analyze Gate Status", type="primary"):
         # A. Calculate total water needed in Lower Res
         lower_ph_demand = l_gen_target * l_ph_rate
         
-        # B. Calculate current flow rate through gates
-        head_diff = curr_u - curr_l
-        current_flow_rate = 0.185 if head_diff >= 3.0 else 0.160 # MCM/hr
+        # B. Gate Calculation (Based on 3-tier head-dependent rules)
+    gate_vol = 0.0
+    if gate_is_open:
+        head_diff = u_level_in - l_level_in
+        
+        # Define flow rate based on head tiers
+        if head_diff > 3.0:
+            rate = 0.17  # MCM/hr for head > 3m
+        elif 2.0 <= head_diff <= 3.0:
+            rate = 0.15  # MCM/hr for head between 2m and 3m
+        elif 1.5 <= head_diff < 2.0:
+            rate = 0.12  # MCM/hr for head between 1.5m and 2m
+        else:
+            rate = 0.08  # Fallback for head < 1.5m
+            
+        gate_vol = rate * hours_open
+
         
         # C. Estimate time to close
         # Time (hrs) = Water Needed (MCM) / Flow Rate (MCM/hr)
