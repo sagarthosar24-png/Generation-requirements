@@ -1,28 +1,38 @@
 import streamlit as st
 import numpy as np
 
-# --- 1. DATA TABLES (PRECISION LOOKUP) ---
+# --- 1. DATA TABLES (FULL RANGE) ---
 u_rl_table = np.array([
-    90.000, 90.025, 90.050, 90.075, 91.000, 92.000, 93.000, 93.400, 94.000, 
-    94.400, 94.425, 94.450, 94.475, 94.500, 95.000
+    90.000, 90.025, 90.050, 90.075, 90.100, 90.125, 90.150, 90.175, 90.200, 90.225, 
+    90.250, 90.275, 90.300, 90.325, 90.350, 90.375, 90.400, 90.425, 90.450, 90.475, 
+    90.500, 90.525, 90.550, 90.575, 90.600, 90.625, 90.650, 90.675, 90.700, 90.725, 
+    90.750, 90.775, 90.800, 90.825, 90.850, 90.875, 90.900, 90.925, 90.950, 90.975, 
+    91.000, 92.000, 93.000, 93.400, 94.000, 94.100, 94.200, 94.300, 94.400, 94.425, 
+    94.450, 94.475, 94.500, 94.600, 94.700, 94.800, 94.900, 95.000
 ])
 
 u_mcm_table = np.array([
-    4.336, 4.354, 4.371, 4.389, 5.036, 5.736, 6.539, 6.940, 7.535, 
-    7.862, 7.964, 8.016, 8.041, 8.067, 9.081
+    4.336, 4.354, 4.371, 4.389, 4.406, 4.424, 4.441, 4.459, 4.476, 4.494, 
+    4.511, 4.529, 4.546, 4.564, 4.581, 4.599, 4.616, 4.634, 4.651, 4.669, 
+    4.686, 4.704, 4.721, 4.739, 4.756, 4.774, 4.791, 4.809, 4.826, 4.844, 
+    4.861, 4.879, 4.896, 4.914, 4.931, 4.949, 4.966, 4.984, 5.001, 5.019, 
+    5.036, 5.736, 6.539, 6.940, 7.535, 7.657, 7.759, 7.811, 7.862, 7.964, 
+    8.016, 8.041, 8.067, 8.220, 8.425, 8.630, 8.836, 9.081
 ])
 
 l_rl_table = np.array([
-    89.000, 89.125, 89.250, 89.375, 89.500, 89.625, 89.750, 90.000, 91.000, 92.000, 93.000, 94.000, 95.000
+    89.000, 89.125, 89.250, 89.375, 89.500, 89.625, 89.750, 90.000, 91.000, 
+    92.000, 93.000, 94.000, 95.000
 ])
 
 l_mcm_table = np.array([
-    2.870, 2.923, 2.975, 3.028, 3.080, 3.133, 3.185, 3.290, 3.640, 4.020, 4.480, 4.840, 5.940
+    2.870, 2.923, 2.975, 3.028, 3.080, 3.133, 3.185, 3.290, 3.640, 
+    4.020, 4.480, 4.840, 5.940
 ])
 
 # --- 2. LAYOUT ---
 st.set_page_config(page_title="Upper PH Shift Planner", layout="wide")
-st.title("🔋 Upper Lake PH: Independent Target Planner")
+st.title("🔋 Upper Lake PH: Shift Operations Planner")
 
 # --- 3. INPUTS ---
 col1, col2 = st.columns(2)
@@ -30,7 +40,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Upper Lake (94.50m Goal)")
     curr_u = st.number_input("Current Upper RL (m)", value=94.400, format="%.3f")
-    lake_ph_rate = 0.820  # MCM/MUS (Standard Shift Rate)
+    lake_ph_rate = 0.820  # MCM/MUS
 
 with col2:
     st.subheader("📍 Lower Res (90.00m Safety)")
@@ -39,12 +49,12 @@ with col2:
     l_ph_rate = 9.360 
 
 # --- 4. CALCULATION ---
-if st.button("Generate Independent Targets", type="primary"):
+if st.button("Generate Final Shift Targets", type="primary"):
     
-    # A. Upper Lake Fill Logic (94.500m Target)
-    target_u_mcm = 8.067
+    # A. Upper Lake Fill Logic
+    target_u_mcm = 8.067 # 94.500m
     
-    # NEAREST VALUE SEARCH: Finds the closest index in the RL table
+    # Nearest lookup
     idx_u = (np.abs(u_rl_table - curr_u)).argmin()
     start_u_mcm = u_mcm_table[idx_u]
     matched_u_rl = u_rl_table[idx_u]
@@ -56,12 +66,12 @@ if st.button("Generate Independent Targets", type="primary"):
     idx_l = (np.abs(l_rl_table - curr_l)).argmin()
     current_l_mcm = l_mcm_table[idx_l]
     matched_l_rl = l_rl_table[idx_l]
-    min_l_mcm = 3.290
+    min_l_mcm = 3.290 # 90.000m
     
     available_l = current_l_mcm - min_l_mcm
     demand_l = l_gen_target * l_ph_rate
     
-    # Only transfer if Lower Res is in deficit (One-way rule)
+    # One-way transfer deficit
     net_transfer_needed = max(0.0, demand_l - available_l)
     gen_for_transfer = net_transfer_needed / lake_ph_rate
     
@@ -78,16 +88,14 @@ if st.button("Generate Independent Targets", type="primary"):
     st.divider()
     
     final_target = gen_for_94_50 + gen_for_transfer
-    
     st.header(f"Required Upper PH Generation: {final_target:.3f} MUS")
     
     c1, c2 = st.columns(2)
-    
     with c1:
         st.subheader("💧 Level Requirement")
-        st.write(f"Using Nearest RL: **{matched_u_rl:.3f} m**")
-        st.metric("Gen to hit 94.50m", f"{gen_for_94_50:.3f} MUS")
-        st.write(f"Volume to add: **{u_fill_needed:.3f} MCM**")
+        st.write(f"Matched Entry: **{matched_u_rl:.3f} m**")
+        st.metric("Gen for 94.50m", f"{gen_for_94_50:.3f} MUS")
+        st.write(f"Volume Gap: **{u_fill_needed:.3f} MCM**")
         
     with c2:
         st.subheader("🚧 Transfer Requirement")
@@ -99,6 +107,5 @@ if st.button("Generate Independent Targets", type="primary"):
             st.write(f"Extra gen for transfer: **{gen_for_transfer:.3f} MUS**")
 
     with st.expander("Technical Summary"):
-        st.write(f"Head: **{head_diff:.2f}m** | Rate: **{flow_rate} MCM/hr**")
-        st.write(f"Generation Rate used: **{lake_ph_rate} MCM/MUS**")
+        st.write(f"Head: **{head_diff:.2f} m** | Transfer Rate: **{flow_rate} MCM/hr**")
         
