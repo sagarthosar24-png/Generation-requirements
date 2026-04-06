@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 
-# --- 1. SYNCHRONIZED DATA TABLES ---
+# --- 1. DATA TABLES ---
 u_rl_table = np.array([
     90.000, 90.025, 90.050, 90.075, 90.100, 90.125, 90.150, 90.175, 90.200, 90.225,
     90.250, 90.275, 90.300, 90.325, 90.350, 90.375, 90.400, 90.425, 90.450, 90.475,
@@ -27,47 +27,47 @@ l_mcm_table = np.array([
 ])
 
 # --- 2. LAYOUT ---
-st.set_page_config(page_title="Lake Level & Gate Advisor", layout="wide")
-st.title("🌊 Lake Power House: Operations Planner")
+st.set_page_config(page_title="Upper PH Shift Planner", layout="wide")
+st.title("🔋 Upper Lake PH: Independent Target Planner")
 
 # --- 3. INPUTS ---
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📍 Upper Lake Status")
+    st.subheader("📍 Upper Lake (94.50m Goal)")
     curr_u = st.number_input("Current Upper RL (m)", value=93.400, format="%.3f")
-    lake_ph_rate = 0.820 # MCM/MUS
+    lake_ph_rate = 0.820  # MCM/MUS (Incoming water rate)
 
 with col2:
-    st.subheader("📍 Lower Reservoir Status")
+    st.subheader("📍 Lower Res (90.00m Safety)")
     curr_l = st.number_input("Current Lower RL (m)", value=92.500, format="%.3f")
-    l_gen_target = st.number_input("Lower PH Planned Gen (MUS)", value=0.080, format="%.3f")
-    l_ph_rate = 9.360 # MCM/MUS
+    l_gen_target = st.number_input("Lower PH Target (MUS)", value=0.080, format="%.3f")
+    l_ph_rate = 9.360 
 
 # --- 4. CALCULATION ---
-if st.button("Calculate Total Generation Requirements", type="primary"):
+if st.button("Generate Independent Targets", type="primary"):
     
-    # A. Upper Lake Calculation (Target 94.50m = 8.067 MCM)
+    # A. Upper Lake Fill Logic
     target_u_mcm = 8.067
     idx_u = (np.abs(u_rl_table - curr_u)).argmin()
     start_u_mcm = u_mcm_table[idx_u]
     
-    u_gap_mcm = target_u_mcm - start_u_mcm
-    gen_for_level = u_gap_mcm / lake_ph_rate
-    
-    # B. Lower Reservoir Calculation (Safety 90.00m = 3.290 MCM)
+    u_fill_needed = target_u_mcm - start_u_mcm
+    gen_for_94_50 = u_fill_needed / lake_ph_rate
+
+    # B. Lower Reservoir Transfer Logic
     idx_l = (np.abs(l_rl_table - curr_l)).argmin()
     current_l_mcm = l_mcm_table[idx_l]
     min_l_mcm = 3.290
     
-    available_l_mcm = current_l_mcm - min_l_mcm
-    required_l_mcm = l_gen_target * l_ph_rate
+    available_l = current_l_mcm - min_l_mcm
+    demand_l = l_gen_target * l_ph_rate
     
-    # C. Net Deficit/Transfer Requirement
-    net_transfer_needed = max(0.0, required_l_mcm - available_l_mcm)
+    # Only transfer if Lower Res is in deficit
+    net_transfer_needed = max(0.0, demand_l - available_l)
     gen_for_transfer = net_transfer_needed / lake_ph_rate
     
-    # D. Gate Flow Calculation (3-tier)
+    # C. Tunnel Flow Rate (3-tier)
     head_diff = curr_u - curr_l
     if head_diff > 3.0: flow_rate = 0.17
     elif 2.0 <= head_diff <= 3.0: flow_rate = 0.15
@@ -79,28 +79,29 @@ if st.button("Calculate Total Generation Requirements", type="primary"):
     # --- 5. RESULTS ---
     st.divider()
     
-    # TOTAL TARGET
-    total_lake_gen = gen_for_level + gen_for_transfer
-    st.header(f"Total Lake PH Gen Target: {total_lake_gen:.3f} MUS")
+    # Final Upper PH Generation Requirement
+    # Total = Fill gap + Transfer gap
+    final_target = gen_for_94_50 + gen_for_transfer
     
-    res1, res2 = st.columns(2)
+    st.header(f"Required Upper PH Generation: {final_target:.3f} MUS")
     
-    with res1:
-        st.subheader("🏁 Level Goal")
-        st.metric("Gen for 94.50m", f"{gen_for_level:.3f} MUS")
-        st.write(f"Remaining Volume to fill: **{u_gap_mcm:.3f} MCM**")
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.subheader("💧 Level Requirement")
+        st.write(f"Generation to hit 94.50m: **{gen_for_94_50:.3f} MUS**")
+        st.write(f"Volume to add: **{u_fill_needed:.3f} MCM**")
         
-    with res2:
-        st.subheader("🏁 Transfer Goal")
+    with c2:
+        st.subheader("🚧 Transfer Requirement")
         if net_transfer_needed <= 0:
-            st.success("✅ CLOSE GATES: Water is sufficient.")
-            st.write(f"Surplus in Lower Res: **{abs(required_l_mcm - available_l_mcm):.3f} MCM**")
+            st.success("✅ GATES CAN BE CLOSED")
+            st.write("Lower Res surplus exists. No transfer gen required.")
         else:
-            st.warning(f"🕒 KEEP OPEN for **{time_to_close:.2f} Hours**")
-            st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
+            st.warning(f"🕒 OPEN GATES for **{time_to_close:.2f} Hours**")
+            st.write(f"Extra gen for transfer: **{gen_for_transfer:.3f} MUS**")
 
-    with st.expander("Detailed Calculation breakdown"):
-        st.write(f"Upper Lake starting at **{start_u_mcm:.3f} MCM**.")
-        st.write(f"Lower Res has **{available_l_mcm:.3f} MCM** available above 90m.")
-        st.write(f"Current Head Difference is **{head_diff:.2f} m**.")
+    with st.expander("Hydraulic Summary"):
+        st.write(f"Head: **{head_diff:.2f}m** | Transfer Rate: **{flow_rate} MCM/hr**")
+        st.write(f"Lower Res Available: **{available_l:.3f} MCM** (Needs: {demand_l:.3f} MCM)")
         
