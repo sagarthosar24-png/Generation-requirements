@@ -89,8 +89,8 @@ with col2:
 if st.button("Generate Dispatch Report", type="primary"):
     
     # Target and Floor constants
-    U_TARGET_MCM = 8.067 # RL 94.500
-    L_FLOOR_MCM = 3.290  # RL 90.000
+    U_TARGET_MCM = 8.067 # Target for RL 94.500
+    L_FLOOR_MCM = 3.290  # Target for RL 90.000
     
     # 1. Initial State Mapping
     u_rl_list = np.array(list(u_data.keys()))
@@ -101,21 +101,22 @@ if st.button("Generate Dispatch Report", type="primary"):
     l_idx = (np.abs(l_rl_list - curr_l)).argmin()
     start_l_mcm = l_data[l_rl_list[l_idx]]
 
-    # 2. Demand on Rewalje Forebay
+    # 2. Deficit Calculation
     demand_l = l_gen_req * l_conversion
     available_l = start_l_mcm - L_FLOOR_MCM
     transfer_needed_mcm = max(0.0, demand_l - available_l)
     
-    # 3. Simulation for Transfer Duration
+    # 3. Targeted Simulation for Opening Time
     sim_u_mcm = start_u_mcm
     sim_l_mcm = start_l_mcm
     total_mcm_moved = 0.0
     minutes_elapsed = 0
     rates_used = []
     
+    # Only run simulation if there is a deficit
     if transfer_needed_mcm > 0:
         while total_mcm_moved < transfer_needed_mcm:
-            # Map current volume to nearest RL for head diff check
+            # Map current simulation volume back to RLs to check Head Difference
             u_vals = np.array(list(u_data.values()))
             l_vals = np.array(list(l_data.values()))
             curr_sim_u_rl = u_rl_list[(np.abs(u_vals - sim_u_mcm)).argmin()]
@@ -123,34 +124,46 @@ if st.button("Generate Dispatch Report", type="primary"):
             
             head_diff = curr_sim_u_rl - curr_sim_l_rl
             
-            # Flow rate rules based on head
+            # Dynamic Flow rules
             if head_diff > 3.0: flow = 0.17
             elif 2.0 <= head_diff <= 3.0: flow = 0.15
             elif 1.5 <= head_diff < 2.0: flow = 0.12
             elif head_diff > 0: flow = 0.08
-            else: flow = 0.00
+            else: flow = 0.00 # No flow if head is equal or negative
+            
+            # Limit the last step to not overshoot the required deficit
+            remaining_deficit = transfer_needed_mcm - total_mcm_moved
+            step_mcm = flow * (5 / 60) # Try 5-minute increment
+            
+            if step_mcm > remaining_deficit:
+                # If the next 5 mins overshoots, calculate exact fraction of 5 mins needed
+                fraction = remaining_deficit / step_mcm
+                actual_step_minutes = 5 * fraction
+                step_mcm = remaining_deficit
+                minutes_elapsed += actual_step_minutes
+            else:
+                minutes_elapsed += 5
             
             rates_used.append(flow)
-            step_mcm = flow * (5 / 60) # 5 minute step
             sim_u_mcm -= step_mcm
             sim_l_mcm += step_mcm
             total_mcm_moved += step_mcm
-            minutes_elapsed += 5
             
+            # Safety break
             if head_diff <= 0 or minutes_elapsed > 1440: break
 
     hours_required = minutes_elapsed / 60
     avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
 
     # 4. Final Generation Requirements
-    # Gap calculation for reservoir target
+    # RL Gap
     u_vol_gap = U_TARGET_MCM - start_u_mcm
     gen_for_level = u_vol_gap / u_rate
     
-    # GEN FOR TRANSFER: The deficit volume divided by 0.820
+    # Transfer Gap (Strictly Deficit / 0.820)
     gen_for_transfer = transfer_needed_mcm / u_rate
     
-    # Total combined generation target
+    # Total
     total_upper_gen = gen_for_level + gen_for_transfer
 
     # --- 5. RESULTS ---
@@ -170,9 +183,9 @@ if st.button("Generate Dispatch Report", type="primary"):
             st.write(f"Rewalje Forebay Snap: **{l_rl_list[l_idx]:.3f} m**")
         else:
             st.warning("🕒 GATE OPERATION REQUIRED")
+            # This time is now precisely calculated to deliver 'transfer_needed_mcm'
             st.markdown(f"### OPEN GATES for: :red[{hours_required:.2f} Hours]")
             st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
-            # This metric specifically shows Deficit / 0.82
             st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
 
     with st.expander("Technical Log"):
