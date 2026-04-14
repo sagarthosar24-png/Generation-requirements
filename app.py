@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 
-# --- 1. THE COMPLETE DATA TABLES ---
+# --- 1. DATA TABLES ---
 u_data = {
     90.000: 4.336, 90.025: 4.354, 90.050: 4.371, 90.075: 4.389, 90.100: 4.406,
     90.125: 4.424, 90.150: 4.441, 90.175: 4.459, 90.200: 4.476, 90.225: 4.494,
@@ -67,103 +67,95 @@ l_data = {
     94.875: 5.718, 94.938: 5.829, 95.000: 5.940
 }
 
-# --- 2. SETTINGS & LAYOUT ---
-st.set_page_config(page_title="BTRP-Rewalje Dispatch Planner", layout="wide")
-st.title("⚡ Operational Shift Planner")
+# --- 2. LAYOUT ---
+st.set_page_config(page_title="Dynamic Dispatch Planner", layout="wide")
+st.title("⚡ Dynamic Operational Shift Planner")
 
 # --- 3. INPUTS ---
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📍 BTRP DAM (Upper Lake)")
-    curr_u = st.number_input("Current Level (m)", value=94.400, format="%.3f", step=0.025)
-    u_rate = 0.820  # MCM/MUS for BTRP PH
+    st.subheader("📍 BTRP DAM (Upper)")
+    curr_u = st.number_input("Current Level (m)", value=94.400, format="%.3f")
+    u_rate = 0.820 
 
 with col2:
-    st.subheader("📍 Rewalje Forebay (Lower Reservoir)")
-    curr_l = st.number_input("Current Level (m) ", value=92.500, format="%.3f", step=0.063)
-    l_gen_req = st.number_input("Planned Rewalje PH Gen (mus)", value=0.080, format="%.3f")
-    l_conversion = 9.360 # MCM/MUS for Rewalje PH
+    st.subheader("📍 Rewalje Forebay (Lower)")
+    curr_l = st.number_input("Current Level (m) ", value=92.500, format="%.3f")
+    l_gen_req = st.number_input("Planned Gen (mus)", value=0.080, format="%.3f")
+    l_conversion = 9.360 
 
 # --- 4. CALCULATION ---
 if st.button("Generate Dispatch Report", type="primary"):
     
-    # Target and Floor constants
-    U_TARGET_MCM = 8.067 # Target for RL 94.500
-    L_FLOOR_MCM = 3.290  # Target for RL 90.000
+    # Constants
+    U_TARGET_MCM = 8.067 # RL 94.50
+    L_FLOOR_MCM = 3.290  # RL 90.00
     
-    # 1. Initial State Mapping
-    u_rl_list = np.array(list(u_data.keys()))
-    u_idx = (np.abs(u_rl_list - curr_u)).argmin()
-    start_u_mcm = u_data[u_rl_list[u_idx]]
+    # Get Initial MCM values
+    u_rl_keys = np.array(list(u_data.keys()))
+    l_rl_keys = np.array(list(l_data.keys()))
     
-    l_rl_list = np.array(list(l_data.keys()))
-    l_idx = (np.abs(l_rl_list - curr_l)).argmin()
-    start_l_mcm = l_data[l_rl_list[l_idx]]
+    start_u_mcm = u_data[u_rl_keys[(np.abs(u_rl_keys - curr_u)).argmin()]]
+    start_l_mcm = l_data[l_rl_keys[(np.abs(l_rl_keys - curr_l)).argmin()]]
 
-    # 2. Deficit Calculation
+    # Deficit Logic
     demand_l = l_gen_req * l_conversion
     available_l = start_l_mcm - L_FLOOR_MCM
     transfer_needed_mcm = max(0.0, demand_l - available_l)
     
-    # 3. Targeted Simulation for Opening Time
+    # Dynamic Simulation Loop
     sim_u_mcm = start_u_mcm
     sim_l_mcm = start_l_mcm
     total_mcm_moved = 0.0
     minutes_elapsed = 0
     rates_used = []
     
-    # Only run simulation if there is a deficit
     if transfer_needed_mcm > 0:
+        # Step in 5-minute increments
         while total_mcm_moved < transfer_needed_mcm:
-            # Map current simulation volume back to RLs to check Head Difference
+            # 1. Map current simulated volumes back to RL to check Head
             u_vals = np.array(list(u_data.values()))
             l_vals = np.array(list(l_data.values()))
-            curr_sim_u_rl = u_rl_list[(np.abs(u_vals - sim_u_mcm)).argmin()]
-            curr_sim_l_rl = l_rl_list[(np.abs(l_vals - sim_l_mcm)).argmin()]
             
-            head_diff = curr_sim_u_rl - curr_sim_l_rl
+            # Find closest RL for current MCM state
+            u_rl_now = u_rl_keys[(np.abs(u_vals - sim_u_mcm)).argmin()]
+            l_rl_now = l_rl_keys[(np.abs(l_vals - sim_l_mcm)).argmin()]
+            head_diff = u_rl_now - l_rl_now
             
-            # Dynamic Flow rules
-            if head_diff > 3.0: flow = 0.17
-            elif 2.0 <= head_diff <= 3.0: flow = 0.15
-            elif 1.5 <= head_diff < 2.0: flow = 0.12
-            elif head_diff > 0: flow = 0.08
-            else: flow = 0.00 # No flow if head is equal or negative
-            
-            # Limit the last step to not overshoot the required deficit
-            remaining_deficit = transfer_needed_mcm - total_mcm_moved
-            step_mcm = flow * (5 / 60) # Try 5-minute increment
-            
-            if step_mcm > remaining_deficit:
-                # If the next 5 mins overshoots, calculate exact fraction of 5 mins needed
-                fraction = remaining_deficit / step_mcm
-                actual_step_minutes = 5 * fraction
-                step_mcm = remaining_deficit
-                minutes_elapsed += actual_step_minutes
-            else:
-                minutes_elapsed += 5
+            # 2. Determine Flow Rate based on diminishing head
+            if head_diff > 3.0: flow = 0.110
+            elif 2.0 <= head_diff <= 3.0: flow = 0.095
+            elif 1.0 <= head_diff < 2.0: flow = 0.079
+            elif head_diff > 0: flow = 0.045
+            else: flow = 0.00
             
             rates_used.append(flow)
-            sim_u_mcm -= step_mcm
-            sim_l_mcm += step_mcm
-            total_mcm_moved += step_mcm
             
-            # Safety break
+            # 3. Move Water
+            remaining = transfer_needed_mcm - total_mcm_moved
+            step_mcm = flow * (5/60)
+            
+            if step_mcm >= remaining:
+                # Exact fraction of the last 5 mins
+                fraction = remaining / (flow * (5/60)) if flow > 0 else 1
+                minutes_elapsed += (5 * fraction)
+                total_mcm_moved = transfer_needed_mcm
+            else:
+                minutes_elapsed += 5
+                total_mcm_moved += step_mcm
+                sim_u_mcm -= step_mcm # Upper level drops
+                sim_l_mcm += step_mcm # Lower level rises
+            
+            # Safety checks
             if head_diff <= 0 or minutes_elapsed > 1440: break
 
     hours_required = minutes_elapsed / 60
     avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
 
-    # 4. Final Generation Requirements
-    # RL Gap
-    u_vol_gap = U_TARGET_MCM - start_u_mcm
-    gen_for_level = u_vol_gap / u_rate
-    
-    # Transfer Gap (Strictly Deficit / 0.820)
-    gen_for_transfer = transfer_needed_mcm / u_rate
-    
-    # Total
+    # Gen Target Logic
+    gen_for_level = (U_TARGET_MCM - start_u_mcm) / u_rate
+    gen_for_transfer = transfer_needed_mcm / u_rate 
     total_upper_gen = gen_for_level + gen_for_transfer
 
     # --- 5. RESULTS ---
@@ -173,22 +165,21 @@ if st.button("Generate Dispatch Report", type="primary"):
     res1, res2 = st.columns(2)
     with res1:
         st.subheader("🏁 Leveling Strategy")
-        st.write(f"BTRP DAM Snap: **{u_rl_list[u_idx]:.3f} m**")
-        st.metric("Gen for Target (94.50m)", f"{gen_for_level:.3f} MUS")
+        st.write(f"BTRP Initial RL: **{curr_u:.3f} m**")
+        st.metric("Gen to reach RL 94.50", f"{gen_for_level:.3f} MUS")
         
     with res2:
         st.subheader("🏁 Transfer Strategy")
         if transfer_needed_mcm <= 0:
             st.success("✅ NO TRANSFER REQUIRED")
-            st.write(f"Rewalje Forebay Snap: **{l_rl_list[l_idx]:.3f} m**")
         else:
-            st.warning("🕒 GATE OPERATION REQUIRED")
-            # This time is now precisely calculated to deliver 'transfer_needed_mcm'
-            st.markdown(f"### OPEN GATES for: :red[{hours_required:.2f} Hours]")
-            st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
+            st.warning("🕒 DYNAMIC GATE OPERATION")
+            st.markdown(f"### TOTAL TIME: :red[{hours_required:.2f} Hours]")
+            st.write(f"Volume Moved: **{transfer_needed_mcm:.3f} MCM**")
             st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
 
-    with st.expander("Technical Log"):
-        st.write(f"Initial Head Difference: **{curr_u - curr_l:.2f} m**")
+    with st.expander("Technical Log (Diminishing Head Analysis)"):
+        st.write(f"Starting Head Difference: **{curr_u - curr_l:.2f} m**")
         if rates_used:
-            st.write(f"Avg. Transfer Rate: **{avg_flow_rate:.3f} MCM/hr**")
+            st.write(f"Average Flow across duration: **{avg_flow_rate:.4f} MCM/hr**")
+            st.info("Note: The flow rate was re-calculated every 5 minutes as levels changed.")
