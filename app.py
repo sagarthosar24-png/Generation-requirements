@@ -2,8 +2,6 @@ import streamlit as st
 import numpy as np
 
 # --- 1. THE COMPLETE DATA TABLES ---
-
-# Upper Reservoir Data (as previously shared)
 u_data = {
     90.000: 4.336, 90.025: 4.354, 90.050: 4.371, 90.075: 4.389, 90.100: 4.406,
     90.125: 4.424, 90.150: 4.441, 90.175: 4.459, 90.200: 4.476, 90.225: 4.494,
@@ -48,7 +46,6 @@ u_data = {
     95.000: 9.081
 }
 
-# Lower Reservoir Data (as shared)
 l_data = {
     89.000: 2.870, 89.125: 2.923, 89.250: 2.975, 89.375: 3.028, 89.500: 3.080,
     89.625: 3.133, 89.750: 3.185, 90.000: 3.290, 90.063: 3.304, 90.125: 3.318,
@@ -80,7 +77,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Upper Lake (Target 94.500m)")
     curr_u = st.number_input("Current Upper RL (m)", value=94.400, format="%.3f", step=0.025)
-    u_rate = 0.820  # MCM/MUS (Shift Rate)
+    u_rate = 0.820  # MCM/MUS
 
 with col2:
     st.subheader("📍 Lower Reservoir")
@@ -91,60 +88,100 @@ with col2:
 # --- 4. CALCULATION ---
 if st.button("Generate Dispatch Report", type="primary"):
     
-    # Target Values
-    U_TARGET_RL = 94.500
-    U_TARGET_MCM = 8.067
-    L_FLOOR_MCM = 3.290 # RL 90.000
+    # Constants
+    U_TARGET_MCM = 8.067 # RL 94.500
+    L_FLOOR_MCM = 3.290  # RL 90.000
     
-    # Upper Lake Math
-    u_rls = np.array(list(u_data.keys()))
-    u_idx = (np.abs(u_rls - curr_u)).argmin()
-    start_u_mcm = u_data[u_rls[u_idx]]
+    # 1. Initial State
+    u_rl_list = np.array(list(u_data.keys()))
+    u_idx = (np.abs(u_rl_list - curr_u)).argmin()
+    start_u_mcm = u_data[u_rl_list[u_idx]]
     
+    l_rl_list = np.array(list(l_data.keys()))
+    l_idx = (np.abs(l_rl_list - curr_l)).argmin()
+    start_l_mcm = l_data[l_rl_list[l_idx]]
+
+    # 2. Demand on Lower Reservoir
+    demand_l = l_gen_req * l_conversion
+    available_l = start_l_mcm - L_FLOOR_MCM
+    transfer_needed_mcm = max(0.0, demand_l - available_l)
+    
+    # 3. Iterative Transfer Calculation (The "Average Rate" logic)
+    # We simulate the gate being open to move the 'transfer_needed_mcm'
+    sim_u_mcm = start_u_mcm
+    sim_l_mcm = start_l_mcm
+    total_mcm_moved = 0.0
+    minutes_elapsed = 0
+    rates_used = []
+    
+    # Logic: Keep transferring until the deficit is covered
+    if transfer_needed_mcm > 0:
+        while total_mcm_moved < transfer_needed_mcm:
+            # Check current RLs in simulation to find head difference
+            # (Finding nearest RL in table to current simulated MCM)
+            u_vals = np.array(list(u_data.values()))
+            l_vals = np.array(list(l_data.values()))
+            
+            curr_sim_u_rl = u_rl_list[(np.abs(u_vals - sim_u_mcm)).argmin()]
+            curr_sim_l_rl = l_rl_list[(np.abs(l_vals - sim_l_mcm)).argmin()]
+            
+            head_diff = curr_sim_u_rl - curr_sim_l_rl
+            
+            # Determine Discharge Rate
+            if head_diff > 3.0: flow = 0.17
+            elif 2.0 <= head_diff <= 3.0: flow = 0.15
+            elif 1.5 <= head_diff < 2.0: flow = 0.12
+            else: flow = 0.08
+            
+            rates_used.append(flow)
+            
+            # Move water in 5-minute increments
+            step_mcm = flow * (5 / 60)
+            sim_u_mcm -= step_mcm
+            sim_l_mcm += step_mcm
+            total_mcm_moved += step_mcm
+            minutes_elapsed += 5
+            
+            # Safety break to prevent infinite loops if levels equalize
+            if head_diff <= 0 or minutes_elapsed > 1440: 
+                break
+
+    hours_required = minutes_elapsed / 60
+    avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
+
+    # 4. Final Generation Requirements
+    # Note: Gen for level must account for the water we are about to lose via gate transfer
     u_vol_gap = U_TARGET_MCM - start_u_mcm
     gen_for_level = u_vol_gap / u_rate
-
-    # Lower Reservoir Math (Independent Check)
-    l_rls = np.array(list(l_data.keys()))
-    l_idx = (np.abs(l_rls - curr_l)).argmin()
-    start_l_mcm = l_data[l_rls[l_idx]]
-    
-    available_l = start_l_mcm - L_FLOOR_MCM
-    demand_l = l_gen_req * l_conversion
-    
-    transfer_deficit = max(0.0, demand_l - available_l)
-    gen_for_transfer = transfer_deficit / u_rate
-    
-    # Hydraulic Transfer Advisory
-    head_diff = curr_u - curr_l
-    if head_diff > 3.0: gate_flow = 0.17
-    elif 2.0 <= head_diff <= 3.0: gate_flow = 0.15
-    elif 1.5 <= head_diff < 2.0: gate_flow = 0.12
-    else: gate_flow = 0.08
+    gen_for_transfer = total_mcm_moved / u_rate
+    total_upper_gen = gen_for_level + gen_for_transfer
 
     # --- 5. RESULTS ---
     st.divider()
-    total_upper_gen = gen_for_level + gen_for_transfer
-    st.header(f"Upper PH Dispatch Target: {total_upper_gen:.3f} MUS")
+    st.header(f"Upper PH Dispatch Target: {max(0, total_upper_gen):.3f} MUS")
     
     res1, res2 = st.columns(2)
     with res1:
         st.subheader("🏁 Leveling Strategy")
-        st.write(f"Upper RL Snap: **{u_rls[u_idx]:.3f}m**")
+        st.write(f"Upper RL Snap: **{u_rl_list[u_idx]:.3f}m**")
         st.metric("Gen for 94.50m", f"{gen_for_level:.3f} MUS")
-        st.info(f"Adding {u_vol_gap:.3f} MCM to reservoir.")
+        st.info(f"Targeting +{u_vol_gap:.3f} MCM storage change.")
         
     with res2:
         st.subheader("🏁 Transfer Strategy")
-        if transfer_deficit <= 0:
-            st.success("✅ NO TRANSFER NEEDED")
-            st.write(f"Lower Reservoir Snap: **{l_rls[l_idx]:.3f}m**")
+        if transfer_needed_mcm <= 0:
+            st.success("✅ NO TRANSFER REQUIRED")
+            st.write(f"Lower Reservoir Snap: **{l_rl_list[l_idx]:.3f}m**")
             st.write(f"Current Surplus: {available_l - demand_l:.3f} MCM")
         else:
-            time_required = transfer_deficit / gate_flow
-            st.warning(f"🕒 OPEN GATES for **{time_required:.2f} Hours**")
+            st.warning(f"🕒 OPEN GATES for **{hours_required:.2f} Hours**")
+            st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
             st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
 
-    with st.expander("System Constants"):
-        st.write(f"Head Difference: **{head_diff:.2f} m**")
-        st.write(f"Flow Rate: **{gate_flow} MCM/hr**")
+    with st.expander("Hydraulic Constants & Average Flow"):
+        st.write(f"Initial Head Difference: **{curr_u - curr_l:.2f} m**")
+        if rates_used:
+            st.write(f"Calculated Average Discharge: **{avg_flow_rate:.3f} MCM/hr**")
+            st.caption("The flow rate was adjusted automatically as the reservoir levels converged during the transfer.")
+        else:
+            st.write("Gate flow not calculated (No transfer needed).")
