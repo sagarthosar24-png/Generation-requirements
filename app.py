@@ -173,4 +173,3 @@ if st.button("Generate Dispatch Report", type="primary"):
         st.write(f"Initial Head Difference: **{curr_u - curr_l:.2f} m**")
         if rates_used:
             st.write(f"Avg. Transfer Rate: **{avg_flow_rate:.3f} MCM/hr**")
-            
