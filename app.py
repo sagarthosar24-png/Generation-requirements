@@ -149,7 +149,7 @@ if st.button("Generate Dispatch Report", type="primary"):
 
     # --- 5. RESULTS ---
     st.divider()
-    st.header(f"BTRP PH Dispatch Target: {max(0, total_upper_gen):.3f} MUS")
+    st.header(f"Bhira PH Dispatch Target: {max(0, total_upper_gen):.3f} MUS")
     
     res1, res2 = st.columns(2)
     with res1:
