@@ -67,7 +67,7 @@ l_data = {
     94.875: 5.718, 94.938: 5.829, 95.000: 5.940
 }
 
-# --- 2. LAYOUT ---
+# --- 2. SETTINGS & LAYOUT ---
 st.set_page_config(page_title="BTRP-Rewalje Dispatch Planner", layout="wide")
 st.title("⚡ Operational Shift Planner")
 
@@ -76,23 +76,23 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📍 BTRP DAM (Upper Lake)")
-    curr_u = st.number_input("Current Level (m) ", value=94.400, format="%.3f", step=0.025)
-    u_rate = 0.820  # MCM/MUS
+    curr_u = st.number_input("Current Level (m)", value=94.400, format="%.3f", step=0.025)
+    u_rate = 0.820  # MCM/MUS for BTRP PH
 
 with col2:
     st.subheader("📍 Rewalje Forebay (Lower Reservoir)")
-    curr_l = st.number_input("Current Level (m)  ", value=92.500, format="%.3f", step=0.063)
+    curr_l = st.number_input("Current Level (m) ", value=92.500, format="%.3f", step=0.063)
     l_gen_req = st.number_input("Planned Rewalje PH Gen (mus)", value=0.080, format="%.3f")
     l_conversion = 9.360 # MCM/MUS for Rewalje PH
 
 # --- 4. CALCULATION ---
 if st.button("Generate Dispatch Report", type="primary"):
     
-    # Constants
+    # Target and Floor constants
     U_TARGET_MCM = 8.067 # RL 94.500
     L_FLOOR_MCM = 3.290  # RL 90.000
     
-    # 1. Initial State
+    # 1. Initial State Mapping
     u_rl_list = np.array(list(u_data.keys()))
     u_idx = (np.abs(u_rl_list - curr_u)).argmin()
     start_u_mcm = u_data[u_rl_list[u_idx]]
@@ -106,7 +106,7 @@ if st.button("Generate Dispatch Report", type="primary"):
     available_l = start_l_mcm - L_FLOOR_MCM
     transfer_needed_mcm = max(0.0, demand_l - available_l)
     
-    # 3. Iterative Transfer Calculation
+    # 3. Simulation for Transfer Duration
     sim_u_mcm = start_u_mcm
     sim_l_mcm = start_l_mcm
     total_mcm_moved = 0.0
@@ -115,14 +115,15 @@ if st.button("Generate Dispatch Report", type="primary"):
     
     if transfer_needed_mcm > 0:
         while total_mcm_moved < transfer_needed_mcm:
+            # Map current volume to nearest RL for head diff check
             u_vals = np.array(list(u_data.values()))
             l_vals = np.array(list(l_data.values()))
-            
             curr_sim_u_rl = u_rl_list[(np.abs(u_vals - sim_u_mcm)).argmin()]
             curr_sim_l_rl = l_rl_list[(np.abs(l_vals - sim_l_mcm)).argmin()]
             
             head_diff = curr_sim_u_rl - curr_sim_l_rl
             
+            # Flow rate rules based on head
             if head_diff > 3.0: flow = 0.17
             elif 2.0 <= head_diff <= 3.0: flow = 0.15
             elif 1.5 <= head_diff < 2.0: flow = 0.12
@@ -130,7 +131,7 @@ if st.button("Generate Dispatch Report", type="primary"):
             else: flow = 0.00
             
             rates_used.append(flow)
-            step_mcm = flow * (5 / 60)
+            step_mcm = flow * (5 / 60) # 5 minute step
             sim_u_mcm -= step_mcm
             sim_l_mcm += step_mcm
             total_mcm_moved += step_mcm
@@ -142,9 +143,14 @@ if st.button("Generate Dispatch Report", type="primary"):
     avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
 
     # 4. Final Generation Requirements
+    # Gap calculation for reservoir target
     u_vol_gap = U_TARGET_MCM - start_u_mcm
     gen_for_level = u_vol_gap / u_rate
-    gen_for_transfer = total_mcm_moved / u_rate
+    
+    # GEN FOR TRANSFER: The deficit volume divided by 0.820
+    gen_for_transfer = transfer_needed_mcm / u_rate
+    
+    # Total combined generation target
     total_upper_gen = gen_for_level + gen_for_transfer
 
     # --- 5. RESULTS ---
@@ -163,10 +169,10 @@ if st.button("Generate Dispatch Report", type="primary"):
             st.success("✅ NO TRANSFER REQUIRED")
             st.write(f"Rewalje Forebay Snap: **{l_rl_list[l_idx]:.3f} m**")
         else:
-            # Highlighted hours using a styled info box or large metric
             st.warning("🕒 GATE OPERATION REQUIRED")
             st.markdown(f"### OPEN GATES for: :red[{hours_required:.2f} Hours]")
             st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
+            # This metric specifically shows Deficit / 0.82
             st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
 
     with st.expander("Technical Log"):
