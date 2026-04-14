@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 
-# --- 1. THE COMPLETE DATA TABLES ---
+# --- 1. DATA TABLES (As previously defined) ---
 u_data = {
     90.000: 4.336, 90.025: 4.354, 90.050: 4.371, 90.075: 4.389, 90.100: 4.406,
     90.125: 4.424, 90.150: 4.441, 90.175: 4.459, 90.200: 4.476, 90.225: 4.494,
@@ -76,37 +76,44 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📍 BTRP DAM (Upper Lake)")
-    curr_u = st.number_input("Current Level (m) ", value=94.400, format="%.3f", step=0.025)
+    curr_u = st.number_input("Current Level (m)", value=94.400, format="%.3f", step=0.025)
     u_rate = 0.820  # MCM/MUS
 
 with col2:
     st.subheader("📍 Rewalje Forebay (Lower Reservoir)")
-    curr_l = st.number_input("Current Level (m)  ", value=92.500, format="%.3f", step=0.063)
-    l_gen_req = st.number_input("Planned Rewalje PH Gen (mus)", value=0.080, format="%.3f")
-    l_conversion = 9.360 # MCM/MUS for Rewalje PH
+    curr_l = st.number_input("Current Level (m) ", value=92.700, format="%.3f", step=0.063)
+    l_gen_req = st.number_input("Planned Rewalje PH Gen (mus)", value=0.280, format="%.3f")
+    l_conversion = 9.360 
 
 # --- 4. CALCULATION ---
 if st.button("Generate Dispatch Report", type="primary"):
     
-    # Constants
+    # 1. References
     U_TARGET_MCM = 8.067 # RL 94.500
     L_FLOOR_MCM = 3.290  # RL 90.000
     
-    # 1. Initial State
+    # 2. Fetch BTRP Current State
     u_rl_list = np.array(list(u_data.keys()))
     u_idx = (np.abs(u_rl_list - curr_u)).argmin()
     start_u_mcm = u_data[u_rl_list[u_idx]]
     
+    # 3. Component A: Gen to bring BTRP to 94.50m
+    # (Water volume required to reach target storage)
+    u_vol_gap = U_TARGET_MCM - start_u_mcm
+    gen_for_level = u_vol_gap / u_rate
+    
+    # 4. Fetch Rewalje Current State
     l_rl_list = np.array(list(l_data.keys()))
     l_idx = (np.abs(l_rl_list - curr_l)).argmin()
     start_l_mcm = l_data[l_rl_list[l_idx]]
 
-    # 2. Demand on Rewalje Forebay
-    demand_l = l_gen_req * l_conversion
-    available_l = start_l_mcm - L_FLOOR_MCM
-    transfer_needed_mcm = max(0.0, demand_l - available_l)
+    # 5. Component B: Gen to support Transfer
+    total_needed_l_mcm = l_gen_req * l_conversion
+    available_buffer_l = start_l_mcm - L_FLOOR_MCM
+    transfer_needed_mcm = max(0.0, total_needed_l_mcm - available_buffer_l)
     
-    # 3. Iterative Transfer Calculation
+    # 6. Iterative Loop for Gate Time
+    # (This calculates the actual water movement based on head difference)
     sim_u_mcm = start_u_mcm
     sim_l_mcm = start_l_mcm
     total_mcm_moved = 0.0
@@ -117,7 +124,6 @@ if st.button("Generate Dispatch Report", type="primary"):
         while total_mcm_moved < transfer_needed_mcm:
             u_vals = np.array(list(u_data.values()))
             l_vals = np.array(list(l_data.values()))
-            
             curr_sim_u_rl = u_rl_list[(np.abs(u_vals - sim_u_mcm)).argmin()]
             curr_sim_l_rl = l_rl_list[(np.abs(l_vals - sim_l_mcm)).argmin()]
             
@@ -126,8 +132,7 @@ if st.button("Generate Dispatch Report", type="primary"):
             if head_diff > 3.0: flow = 0.17
             elif 2.0 <= head_diff <= 3.0: flow = 0.15
             elif 1.5 <= head_diff < 2.0: flow = 0.12
-            elif head_diff > 0: flow = 0.08
-            else: flow = 0.00
+            else: flow = 0.08
             
             rates_used.append(flow)
             step_mcm = flow * (5 / 60)
@@ -135,42 +140,29 @@ if st.button("Generate Dispatch Report", type="primary"):
             sim_l_mcm += step_mcm
             total_mcm_moved += step_mcm
             minutes_elapsed += 5
-            
             if head_diff <= 0 or minutes_elapsed > 1440: break
 
     hours_required = minutes_elapsed / 60
-    avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
-
-    # 4. Final Generation Requirements
-    u_vol_gap = U_TARGET_MCM - start_u_mcm
-    gen_for_level = u_vol_gap / u_rate
     gen_for_transfer = total_mcm_moved / u_rate
-    total_upper_gen = gen_for_level + gen_for_transfer
+    
+    # FINAL TOTAL
+    total_btrp_dispatch = gen_for_level + gen_for_transfer
 
     # --- 5. RESULTS ---
     st.divider()
-    st.header(f"Bhira PH Dispatch Target: {max(0, total_upper_gen):.3f} MUS")
+    st.header(f"Total BTRP PH Dispatch Target: {total_btrp_dispatch:.3f} MUS")
     
-    res1, res2 = st.columns(2)
-    with res1:
-        st.subheader("🏁 Leveling Strategy")
-        st.write(f"BTRP DAM Snap: **{u_rl_list[u_idx]:.3f} m**")
-        st.metric("Gen for Target (94.50m)", f"{gen_for_level:.3f} MUS")
+    col_res1, col_res2 = st.columns(2)
+    with col_res1:
+        st.subheader("📊 Generation Breakdown")
+        st.write(f"Gen for 94.50m Level: **{gen_for_level:.3f} MUS**")
+        st.write(f"Gen for Water Transfer: **{gen_for_transfer:.3f} MUS**")
         
-    with res2:
-        st.subheader("🏁 Transfer Strategy")
-        if transfer_needed_mcm <= 0:
-            st.success("✅ NO TRANSFER REQUIRED")
-            st.write(f"Rewalje Forebay Snap: **{l_rl_list[l_idx]:.3f} m**")
-        else:
-            # Highlighted hours using a styled info box or large metric
-            st.warning("🕒 GATE OPERATION REQUIRED")
+    with col_res2:
+        st.subheader("🕒 Gate Operation")
+        if transfer_needed_mcm > 0:
             st.markdown(f"### OPEN GATES for: :red[{hours_required:.2f} Hours]")
-            st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
-            st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
-
-    with st.expander("Technical Log"):
-        st.write(f"Initial Head Difference: **{curr_u - curr_l:.2f} m**")
-        if rates_used:
-            st.write(f"Avg. Transfer Rate: **{avg_flow_rate:.3f} MCM/hr**")
-    
+            st.info(f"Moving {total_mcm_moved:.3f} MCM to Rewalje")
+        else:
+            st.success("✅ Buffer sufficient. No gate opening needed.")
+            
