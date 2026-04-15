@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 
-# --- 1. DATA TABLES ---
+# --- 1. DATA TABLES (Upper and Lower) ---
 u_data = {
     90.000: 4.336, 90.025: 4.354, 90.050: 4.371, 90.075: 4.389, 90.100: 4.406,
     90.125: 4.424, 90.150: 4.441, 90.175: 4.459, 90.200: 4.476, 90.225: 4.494,
@@ -91,10 +91,12 @@ if st.button("Generate Dispatch Report", type="primary"):
     # Constants
     U_TARGET_MCM = 8.067 # RL 94.50
     L_FLOOR_MCM = 3.290  # RL 90.00
+    L_FSL_RL = 94.500    # Full Supply Level
     
-    # Get Initial MCM values
+    # Get Keys and initial Volumes
     u_rl_keys = np.array(list(u_data.keys()))
     l_rl_keys = np.array(list(l_data.keys()))
+    l_mcm_vals = np.array(list(l_data.values()))
     
     start_u_mcm = u_data[u_rl_keys[(np.abs(u_rl_keys - curr_u)).argmin()]]
     start_l_mcm = l_data[l_rl_keys[(np.abs(l_rl_keys - curr_l)).argmin()]]
@@ -104,7 +106,7 @@ if st.button("Generate Dispatch Report", type="primary"):
     available_l = start_l_mcm - L_FLOOR_MCM
     transfer_needed_mcm = max(0.0, demand_l - available_l)
     
-    # Dynamic Simulation Loop
+    # Simulation for Dynamic Head & Time
     sim_u_mcm = start_u_mcm
     sim_l_mcm = start_l_mcm
     total_mcm_moved = 0.0
@@ -112,18 +114,14 @@ if st.button("Generate Dispatch Report", type="primary"):
     rates_used = []
     
     if transfer_needed_mcm > 0:
-        # Step in 5-minute increments
         while total_mcm_moved < transfer_needed_mcm:
-            # 1. Map current simulated volumes back to RL to check Head
+            # Map volumes to current RLs
             u_vals = np.array(list(u_data.values()))
-            l_vals = np.array(list(l_data.values()))
-            
-            # Find closest RL for current MCM state
             u_rl_now = u_rl_keys[(np.abs(u_vals - sim_u_mcm)).argmin()]
-            l_rl_now = l_rl_keys[(np.abs(l_vals - sim_l_mcm)).argmin()]
+            l_rl_now = l_rl_keys[(np.abs(l_mcm_vals - sim_l_mcm)).argmin()]
             head_diff = u_rl_now - l_rl_now
             
-            # 2. Determine Flow Rate based on diminishing head
+            # Diminishing Flow Logic
             if head_diff > 3.0: flow = 0.110
             elif 2.0 <= head_diff <= 3.0: flow = 0.095
             elif 1.0 <= head_diff < 2.0: flow = 0.079
@@ -132,34 +130,46 @@ if st.button("Generate Dispatch Report", type="primary"):
             
             rates_used.append(flow)
             
-            # 3. Move Water
             remaining = transfer_needed_mcm - total_mcm_moved
             step_mcm = flow * (5/60)
             
             if step_mcm >= remaining:
-                # Exact fraction of the last 5 mins
                 fraction = remaining / (flow * (5/60)) if flow > 0 else 1
                 minutes_elapsed += (5 * fraction)
                 total_mcm_moved = transfer_needed_mcm
+                # We stop exactly at deficit, but calculate final volume for safety
+                sim_l_mcm += remaining 
             else:
                 minutes_elapsed += 5
                 total_mcm_moved += step_mcm
-                sim_u_mcm -= step_mcm # Upper level drops
-                sim_l_mcm += step_mcm # Lower level rises
+                sim_u_mcm -= step_mcm
+                sim_l_mcm += step_mcm
             
-            # Safety checks
             if head_diff <= 0 or minutes_elapsed > 1440: break
 
     hours_required = minutes_elapsed / 60
     avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
+    
+    # --- Final Level Prediction ---
+    # Find the RL corresponding to the simulated final MCM of the lower forebay
+    final_l_rl = l_rl_keys[(np.abs(l_mcm_vals - sim_l_mcm)).argmin()]
 
-    # Gen Target Logic
+    # Gen Requirements
     gen_for_level = (U_TARGET_MCM - start_u_mcm) / u_rate
     gen_for_transfer = transfer_needed_mcm / u_rate 
     total_upper_gen = gen_for_level + gen_for_transfer
 
     # --- 5. RESULTS ---
     st.divider()
+    
+    # OVERFLOW ALERT
+    if final_l_rl >= L_FSL_RL:
+        st.error(f"⚠️ OVERFLOW ALERT: Rewalje Forebay will hit {final_l_rl:.3f}m (FSL is {L_FSL_RL}m). Increase Rewalje generation or stop transfer earlier!")
+    elif final_l_rl >= 94.00:
+        st.warning(f"🔔 HIGH LEVEL WARNING: Rewalje Forebay will reach {final_l_rl:.3f}m.")
+    else:
+        st.success(f"✅ Forebay Level Safe: Final predicted level is {final_l_rl:.3f}m.")
+
     st.header(f"BTRP PH Dispatch Target: {max(0, total_upper_gen):.3f} MUS")
     
     res1, res2 = st.columns(2)
@@ -171,15 +181,13 @@ if st.button("Generate Dispatch Report", type="primary"):
     with res2:
         st.subheader("🏁 Transfer Strategy")
         if transfer_needed_mcm <= 0:
-            st.success("✅ NO TRANSFER REQUIRED")
+            st.info("Current level sufficient for planned generation.")
         else:
-            st.warning("🕒 DYNAMIC GATE OPERATION")
-            st.markdown(f"### TOTAL TIME: :red[{hours_required:.2f} Hours]")
-            st.write(f"Volume Moved: **{transfer_needed_mcm:.3f} MCM**")
-            st.metric("Gen for Transfer", f"{gen_for_transfer:.3f} MUS")
+            st.markdown(f"### OPEN GATES FOR: :red[{hours_required:.2f} Hours]")
+            st.write(f"Expected Final Level: **{final_l_rl:.3f} m**")
+            st.metric("Gen for Transfer (Deficit)", f"{gen_for_transfer:.3f} MUS")
 
-    with st.expander("Technical Log (Diminishing Head Analysis)"):
-        st.write(f"Starting Head Difference: **{curr_u - curr_l:.2f} m**")
+    with st.expander("Technical Log"):
+        st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
         if rates_used:
-            st.write(f"Average Flow across duration: **{avg_flow_rate:.4f} MCM/hr**")
-            st.info("Note: The flow rate was re-calculated every 5 minutes as levels changed.")
+            st.write(f"Avg. Flow: **{avg_flow_rate:.4f} MCM/hr**")
