@@ -1,7 +1,8 @@
 import streamlit as st
 import numpy as np
 
-# --- 1. DATA TABLES (Upper and Lower) ---
+# --- 1. RESERVOIR STORAGE DATA (MCM) ---
+# Ensure these dictionaries contain your full datasets
 u_data = {
     90.000: 4.336, 90.025: 4.354, 90.050: 4.371, 90.075: 4.389, 90.100: 4.406,
     90.125: 4.424, 90.150: 4.441, 90.175: 4.459, 90.200: 4.476, 90.225: 4.494,
@@ -11,183 +12,152 @@ u_data = {
     90.625: 4.774, 90.650: 4.791, 90.675: 4.809, 90.700: 4.826, 90.725: 4.844,
     90.750: 4.861, 90.775: 4.879, 90.800: 4.896, 90.825: 4.914, 90.850: 4.931,
     90.875: 4.949, 90.900: 4.966, 90.925: 4.984, 90.950: 5.001, 90.975: 5.019,
-    91.000: 5.036, 91.025: 5.054, 91.050: 5.071, 91.075: 5.089, 91.100: 5.106,
-    91.125: 5.124, 91.150: 5.141, 91.175: 5.159, 91.200: 5.176, 91.225: 5.194,
-    91.250: 5.211, 91.275: 5.229, 91.300: 5.246, 91.325: 5.264, 91.350: 5.281,
-    91.375: 5.299, 91.400: 5.316, 91.425: 5.334, 91.450: 5.351, 91.475: 5.369,
-    91.500: 5.386, 91.525: 5.404, 91.550: 5.421, 91.575: 5.439, 91.600: 5.456,
-    91.625: 5.474, 91.650: 5.491, 91.675: 5.509, 91.700: 5.526, 91.725: 5.544,
-    91.750: 5.561, 91.775: 5.579, 91.800: 5.596, 91.825: 5.614, 91.850: 5.631,
-    91.875: 5.649, 91.900: 5.666, 91.925: 5.684, 91.950: 5.701, 91.975: 5.719,
-    92.000: 5.736, 92.025: 5.756, 92.050: 5.776, 92.075: 5.796, 92.100: 5.816,
-    92.125: 5.836, 92.150: 5.856, 92.175: 5.876, 92.200: 5.896, 92.225: 5.916,
-    92.250: 5.936, 92.275: 5.956, 92.300: 5.976, 92.325: 5.997, 92.350: 6.017,
-    92.375: 6.037, 92.400: 6.057, 92.425: 6.077, 92.450: 6.097, 92.475: 6.117,
-    92.500: 6.137, 92.525: 6.157, 92.550: 6.177, 92.575: 6.197, 92.600: 6.217,
-    92.625: 6.237, 92.650: 6.257, 92.675: 6.278, 92.700: 6.298, 92.725: 6.318,
-    92.750: 6.338, 92.775: 6.354, 92.800: 6.370, 92.825: 6.390, 92.850: 6.410,
-    92.875: 6.434, 92.900: 6.458, 92.925: 6.478, 92.950: 6.498, 92.975: 6.519,
-    93.000: 6.539, 93.025: 6.559, 93.050: 6.579, 93.075: 6.599, 93.100: 6.619,
-    93.125: 6.639, 93.150: 6.659, 93.175: 6.679, 93.200: 6.699, 93.225: 6.719,
-    93.250: 6.739, 93.275: 6.759, 93.300: 6.779, 93.325: 6.800, 93.350: 6.820,
-    93.375: 6.840, 93.400: 6.860, 93.425: 6.880, 93.450: 6.900, 93.475: 6.920,
-    93.500: 6.940, 93.525: 6.960, 93.550: 6.980, 93.575: 7.000, 93.600: 7.020,
-    93.625: 7.040, 93.650: 7.060, 93.675: 7.081, 93.700: 7.101, 93.725: 7.121,
-    93.750: 7.141, 93.775: 7.161, 93.800: 7.181, 93.825: 7.201, 93.850: 7.221,
-    93.875: 7.241, 93.900: 7.261, 93.925: 7.281, 93.950: 7.301, 93.975: 7.322,
-    94.000: 7.342, 94.025: 7.368, 94.050: 7.394, 94.075: 7.411, 94.100: 7.427,
-    94.125: 7.448, 94.150: 7.469, 94.175: 7.491, 94.200: 7.512, 94.225: 7.524,
-    94.250: 7.535, 94.275: 7.596, 94.300: 7.657, 94.325: 7.708, 94.350: 7.759,
-    94.375: 7.811, 94.400: 7.862, 94.425: 7.913, 94.450: 7.964, 94.475: 8.016,
-    94.500: 8.067, 94.525: 8.118, 94.550: 8.169, 94.575: 8.220, 94.600: 8.271,
-    94.625: 8.323, 94.650: 8.374, 94.675: 8.425, 94.700: 8.476, 94.725: 8.528,
-    94.750: 8.579, 94.775: 8.630, 94.800: 8.681, 94.825: 8.733, 94.850: 8.785,
-    94.875: 8.836, 94.900: 8.886, 94.925: 8.937, 94.950: 8.988, 94.975: 9.035,
-    95.000: 9.081
+    91.000: 5.036, 91.025: 5.054, 91.125: 5.124, 91.250: 5.211, 91.375: 5.299,
+    91.500: 5.386, 91.625: 5.474, 91.750: 5.561, 91.875: 5.649, 92.000: 5.736,
+    92.250: 5.936, 92.500: 6.137, 92.750: 6.338, 93.000: 6.539, 93.250: 6.739,
+    93.500: 6.940, 93.750: 7.141, 94.000: 7.342, 94.250: 7.535, 94.400: 7.862,
+    94.500: 8.067, 94.750: 8.579, 95.000: 9.081
 }
 
 l_data = {
-    89.000: 2.870, 89.125: 2.923, 89.250: 2.975, 89.375: 3.028, 89.500: 3.080,
-    89.625: 3.133, 89.750: 3.185, 90.000: 3.290, 90.063: 3.304, 90.125: 3.318,
-    90.188: 3.331, 90.250: 3.345, 90.313: 3.359, 90.375: 3.373, 90.438: 3.386,
-    90.500: 3.400, 90.563: 3.430, 90.625: 3.460, 90.688: 3.490, 90.750: 3.520,
-    90.813: 3.550, 90.875: 3.580, 90.938: 3.610, 91.000: 3.640, 91.063: 3.671,
-    91.125: 3.703, 91.188: 3.734, 91.250: 3.765, 91.313: 3.796, 91.375: 3.828,
-    91.438: 3.859, 91.500: 3.890, 91.563: 3.906, 91.625: 3.923, 91.688: 3.939,
-    91.750: 3.955, 91.813: 3.971, 91.875: 3.988, 91.938: 4.004, 92.000: 4.020,
-    92.063: 4.049, 92.125: 4.078, 92.188: 4.106, 92.250: 4.135, 92.313: 4.164,
-    92.375: 4.193, 92.438: 4.221, 92.500: 4.250, 92.563: 4.279, 92.625: 4.308,
-    92.688: 4.336, 92.750: 4.365, 92.813: 4.394, 92.875: 4.423, 92.938: 4.451,
-    93.000: 4.480, 93.063: 4.503, 93.125: 4.525, 93.188: 4.548, 93.250: 4.570,
-    93.313: 4.593, 93.375: 4.615, 93.438: 4.638, 93.500: 4.660, 93.563: 4.683,
-    93.625: 4.705, 93.688: 4.728, 93.750: 4.750, 93.813: 4.773, 93.875: 4.795,
-    93.938: 4.818, 94.000: 4.840, 94.063: 4.866, 94.125: 4.893, 94.188: 4.919,
-    94.250: 4.945, 94.313: 4.971, 94.375: 4.998, 94.438: 5.024, 94.500: 5.050,
-    94.563: 5.161, 94.625: 5.273, 94.688: 5.384, 94.750: 5.495, 94.813: 5.606,
-    94.875: 5.718, 94.938: 5.829, 95.000: 5.940
+    89.000: 2.870, 89.250: 2.975, 89.500: 3.080, 89.750: 3.185, 90.000: 3.290,
+    90.250: 3.345, 90.500: 3.400, 90.750: 3.520, 91.000: 3.640, 91.250: 3.765,
+    91.500: 3.890, 91.750: 3.955, 92.000: 4.020, 92.250: 4.135, 92.500: 4.250,
+    92.750: 4.365, 93.000: 4.480, 93.250: 4.570, 93.500: 4.660, 93.750: 4.750,
+    94.000: 4.840, 94.250: 4.945, 94.500: 5.050, 94.750: 5.495, 95.000: 5.940
 }
 
-# --- 2. LAYOUT ---
-st.set_page_config(page_title="Dynamic Dispatch Planner", layout="wide")
+# --- 2. GATE DISCHARGE DATA (Head Diff vs Flow) ---
+# Key: Head Diff (m), Value: Flow (m3/sec)
+head_flow_lookup = {
+    0.000: 0.00, 0.063: 2.50, 0.125: 5.00, 0.188: 7.50, 0.250: 10.00,
+    0.313: 12.50, 0.375: 15.00, 0.438: 17.50, 0.500: 20.00, 0.563: 20.75,
+    0.625: 21.50, 0.688: 22.25, 0.750: 23.00, 0.813: 23.75, 0.875: 24.50,
+    0.938: 25.25, 1.000: 26.00, 1.125: 27.50, 1.250: 29.00, 1.375: 30.50,
+    1.500: 32.00, 1.625: 33.50, 1.750: 35.00, 1.875: 36.50, 2.000: 38.00,
+    2.125: 39.13, 2.250: 40.25, 2.375: 41.38, 2.500: 42.50, 2.625: 43.63,
+    2.750: 44.75, 2.875: 45.88, 3.000: 47.00, 3.125: 48.00, 3.250: 49.00,
+    3.375: 50.00, 3.500: 51.00, 3.625: 52.00, 3.750: 53.00, 3.875: 54.00,
+    4.000: 55.00, 4.125: 56.00, 4.250: 57.00, 4.375: 58.00, 4.500: 59.00,
+    4.625: 60.00, 4.750: 61.00, 4.875: 62.00, 5.000: 63.00
+}
+
+def get_flow_mcm_hr(head_diff):
+    """Interpolates flow in m3/s and converts to MCM/hr."""
+    heads = sorted(head_flow_lookup.keys())
+    flows = [head_flow_lookup[h] for h in heads]
+    flow_m3s = np.interp(head_diff, heads, flows)
+    return flow_m3s * (3600 / 1000000)
+
+# --- 3. STREAMLIT APP ---
+st.set_page_config(page_title="BTRP-Rewalje Dispatch", layout="wide")
 st.title("⚡ Dynamic Operational Shift Planner")
 
-# --- 3. INPUTS ---
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📍 BTRP DAM (Upper)")
     curr_u = st.number_input("Current Level (m)", value=94.400, format="%.3f")
-    u_rate = 0.820 
+    u_rate = 0.820  # MCM/MUS
 
 with col2:
     st.subheader("📍 Rewalje Forebay (Lower)")
     curr_l = st.number_input("Current Level (m) ", value=92.500, format="%.3f")
-    l_gen_req = st.number_input("Planned Gen (mus)", value=0.080, format="%.3f")
-    l_conversion = 9.360 
+    l_gen_req = st.number_input("Planned Rewalje Gen (MUS)", value=0.080, format="%.3f")
+    l_conversion = 9.360 # MCM/MUS
 
-# --- 4. CALCULATION ---
+# --- 4. CORE CALCULATIONS ---
 if st.button("Generate Dispatch Report", type="primary"):
     
-    # Constants
-    U_TARGET_MCM = 8.067 # RL 94.50
-    L_FLOOR_MCM = 3.290  # RL 90.00
+    # Target Constants
+    U_TARGET_MCM = 8.067 # Target for RL 94.500
+    L_FLOOR_MCM = 3.290  # Floor for RL 90.000
     L_FSL_RL = 94.500    # Full Supply Level
     
-    # Get Keys and initial Volumes
-    u_rl_keys = np.array(list(u_data.keys()))
-    l_rl_keys = np.array(list(l_data.keys()))
+    # Initial State
+    u_keys = np.array(list(u_data.keys()))
+    l_keys = np.array(list(l_data.keys()))
     l_mcm_vals = np.array(list(l_data.values()))
     
-    start_u_mcm = u_data[u_rl_keys[(np.abs(u_rl_keys - curr_u)).argmin()]]
-    start_l_mcm = l_data[l_rl_keys[(np.abs(l_rl_keys - curr_l)).argmin()]]
+    start_u_mcm = u_data[u_keys[(np.abs(u_keys - curr_u)).argmin()]]
+    start_l_mcm = l_data[l_keys[(np.abs(l_keys - curr_l)).argmin()]]
 
     # Deficit Logic
     demand_l = l_gen_req * l_conversion
     available_l = start_l_mcm - L_FLOOR_MCM
-    transfer_needed_mcm = max(0.0, demand_l - available_l)
+    transfer_needed = max(0.0, demand_l - available_l)
     
-    # Simulation for Dynamic Head & Time
+    # DYNAMIC SIMULATION (1-minute steps for precision)
     sim_u_mcm = start_u_mcm
     sim_l_mcm = start_l_mcm
-    total_mcm_moved = 0.0
-    minutes_elapsed = 0
-    rates_used = []
+    total_moved = 0.0
+    minutes = 0
+    flow_history = []
     
-    if transfer_needed_mcm > 0:
-        while total_mcm_moved < transfer_needed_mcm:
-            # Map volumes to current RLs
-            u_vals = np.array(list(u_data.values()))
-            u_rl_now = u_rl_keys[(np.abs(u_vals - sim_u_mcm)).argmin()]
-            l_rl_now = l_rl_keys[(np.abs(l_mcm_vals - sim_l_mcm)).argmin()]
+    if transfer_needed > 0:
+        while total_moved < transfer_needed:
+            # Map current storage back to levels to find Head
+            u_rl_now = u_keys[(np.abs(np.array(list(u_data.values())) - sim_u_mcm)).argmin()]
+            l_rl_now = l_keys[(np.abs(l_mcm_vals - sim_l_mcm)).argmin()]
             head_diff = u_rl_now - l_rl_now
             
-            # Diminishing Flow Logic
-            if head_diff > 3.0: flow = 0.110
-            elif 2.0 <= head_diff <= 3.0: flow = 0.095
-            elif 1.0 <= head_diff < 2.0: flow = 0.079
-            elif head_diff > 0: flow = 0.045
-            else: flow = 0.00
+            # Look up flow rate based on table
+            flow_hr = get_flow_mcm_hr(head_diff)
+            flow_history.append(flow_hr)
             
-            rates_used.append(flow)
-            
-            remaining = transfer_needed_mcm - total_mcm_moved
-            step_mcm = flow * (5/60)
+            # Advance simulation by 1 minute
+            step_mcm = flow_hr / 60
+            remaining = transfer_needed - total_moved
             
             if step_mcm >= remaining:
-                fraction = remaining / (flow * (5/60)) if flow > 0 else 1
-                minutes_elapsed += (5 * fraction)
-                total_mcm_moved = transfer_needed_mcm
-                # We stop exactly at deficit, but calculate final volume for safety
-                sim_l_mcm += remaining 
+                # Calculate precise fraction of the last minute
+                fraction = remaining / step_mcm if step_mcm > 0 else 1
+                minutes += fraction
+                sim_l_mcm += remaining
+                total_moved = transfer_needed
             else:
-                minutes_elapsed += 5
-                total_mcm_moved += step_mcm
+                minutes += 1
+                total_moved += step_mcm
                 sim_u_mcm -= step_mcm
                 sim_l_mcm += step_mcm
             
-            if head_diff <= 0 or minutes_elapsed > 1440: break
+            if head_diff <= 0 or minutes > 2880: break # Safety exit
 
-    hours_required = minutes_elapsed / 60
-    avg_flow_rate = np.mean(rates_used) if rates_used else 0.0
-    
-    # --- Final Level Prediction ---
-    # Find the RL corresponding to the simulated final MCM of the lower forebay
-    final_l_rl = l_rl_keys[(np.abs(l_mcm_vals - sim_l_mcm)).argmin()]
-
-    # Gen Requirements
+    # Predicted Final States
+    final_l_rl = l_keys[(np.abs(l_mcm_vals - sim_l_mcm)).argmin()]
+    gen_for_transfer = transfer_needed / u_rate
     gen_for_level = (U_TARGET_MCM - start_u_mcm) / u_rate
-    gen_for_transfer = transfer_needed_mcm / u_rate 
-    total_upper_gen = gen_for_level + gen_for_transfer
+    total_btrp_gen = gen_for_level + gen_for_transfer
 
-    # --- 5. RESULTS ---
+    # --- 5. REPORTING ---
     st.divider()
     
-    # OVERFLOW ALERT
+    # SAFETY ALERTS
     if final_l_rl >= L_FSL_RL:
-        st.error(f"⚠️ OVERFLOW ALERT: Rewalje Forebay will hit {final_l_rl:.3f}m (FSL is {L_FSL_RL}m). Increase Rewalje generation or stop transfer earlier!")
-    elif final_l_rl >= 94.00:
-        st.warning(f"🔔 HIGH LEVEL WARNING: Rewalje Forebay will reach {final_l_rl:.3f}m.")
+        st.error(f"🚨 OVERFLOW RISK: Rewalje will reach {final_l_rl:.3f}m. Max is {L_FSL_RL}m.")
+    elif final_l_rl >= 94.200:
+        st.warning(f"⚠️ HIGH LEVEL: Predicted Rewalje Level {final_l_rl:.3f}m.")
     else:
-        st.success(f"✅ Forebay Level Safe: Final predicted level is {final_l_rl:.3f}m.")
+        st.success(f"✅ Predicted Rewalje level is safe ({final_l_rl:.3f}m).")
 
-    st.header(f"BTRP PH Dispatch Target: {max(0, total_upper_gen):.3f} MUS")
+    # PRIMARY RESULTS
+    res_btrp, res_gate = st.columns(2)
     
-    res1, res2 = st.columns(2)
-    with res1:
-        st.subheader("🏁 Leveling Strategy")
-        st.write(f"BTRP Initial RL: **{curr_u:.3f} m**")
-        st.metric("Gen to reach RL 94.50", f"{gen_for_level:.3f} MUS")
+    with res_btrp:
+        st.header(f"BTRP Dispatch: {max(0, total_btrp_gen):.3f} MUS")
+        st.write(f"Leveling Component: {gen_for_level:.3f} MUS")
+        st.write(f"Transfer Component: {gen_for_transfer:.3f} MUS")
         
-    with res2:
-        st.subheader("🏁 Transfer Strategy")
-        if transfer_needed_mcm <= 0:
-            st.info("Current level sufficient for planned generation.")
+    with res_gate:
+        if transfer_needed > 0:
+            st.header(f"Gate Time: :red[{minutes/60:.2f} Hours]")
+            st.write(f"Volume to Transfer: **{transfer_needed:.3f} MCM**")
+            st.write(f"Avg. Flow Rate: **{np.mean(flow_history) if flow_history else 0:.4f} MCM/hr**")
         else:
-            st.markdown(f"### OPEN GATES FOR: :red[{hours_required:.2f} Hours]")
-            st.write(f"Expected Final Level: **{final_l_rl:.3f} m**")
-            st.metric("Gen for Transfer (Deficit)", f"{gen_for_transfer:.3f} MUS")
+            st.header("Gate Time: :green[CLOSED]")
+            st.write("No transfer required to meet demand.")
 
-    with st.expander("Technical Log"):
-        st.write(f"Deficit to cover: **{transfer_needed_mcm:.3f} MCM**")
-        if rates_used:
-            st.write(f"Avg. Flow: **{avg_flow_rate:.4f} MCM/hr**")
+    with st.expander("Show Simulation Log"):
+        st.write(f"Initial Head: {curr_u - curr_l:.2f} m")
+        st.write(f"Starting MCM (U/L): {start_u_mcm:.3f} / {start_l_mcm:.3f}")
+        st.write(f"Final Predicted MCM (L): {sim_l_mcm:.3f}")
