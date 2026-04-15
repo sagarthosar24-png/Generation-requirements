@@ -61,9 +61,9 @@ with col1:
     u_rate = 0.820  # MCM/MUS
 
 with col2:
-    st.subheader("📍 Rewalje Forebay (Lower)")
+    st.subheader("📍 Rawalje Forebay (Lower)")
     curr_l = st.number_input("Current Level (m) ", value=92.500, format="%.3f")
-    l_gen_req = st.number_input("Planned Rewalje Gen (MUS)", value=0.080, format="%.3f")
+    l_gen_req = st.number_input("Planned Rawalje Gen (MUS)", value=0.080, format="%.3f")
     l_conversion = 9.360 # MCM/MUS
 
 # --- 4. CORE CALCULATIONS ---
@@ -144,13 +144,13 @@ if st.button("Generate Dispatch Report", type="primary"):
     res_btrp, res_gate = st.columns(2)
     
     with res_btrp:
-        st.header(f"BTRP Dispatch: {max(0, total_btrp_gen):.3f} MUS")
-        st.write(f"Leveling Component: {gen_for_level:.3f} MUS")
-        st.write(f"Transfer Component: {gen_for_transfer:.3f} MUS")
+        st.header(f"Total generation Required: {max(0, total_btrp_gen):.3f} MUS")
+        st.write(f"Generation required for 94.50m: {gen_for_level:.3f} MUS")
+        st.write(f"Generation to meet Rawalje Target: {gen_for_transfer:.3f} MUS")
         
     with res_gate:
         if transfer_needed > 0:
-            st.header(f"Gate Time: :red[{minutes/60:.2f} Hours]")
+            st.header(f"Keep Intake Gates Open for: :red[{minutes/60:.2f} Hours]")
             st.write(f"Volume to Transfer: **{transfer_needed:.3f} MCM**")
             st.write(f"Avg. Flow Rate: **{np.mean(flow_history) if flow_history else 0:.4f} MCM/hr**")
         else:
